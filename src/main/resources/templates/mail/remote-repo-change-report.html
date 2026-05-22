@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Git 仓库变更报告</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f8f9fc;
+            color: #2d3748;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 32px 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1120px;
+            margin: 0 auto;
+        }
+        .header {
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 28px;
+            margin-bottom: 32px;
+        }
+        .repo-header {
+            font-size: 30px;
+            font-weight: 700;
+            color: #1e40af;
+            letter-spacing: -0.02em;
+        }
+        .card {
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 32px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05),
+                        0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+        .section-title {
+            font-size: 19px;
+            font-weight: 600;
+            color: #1e2937;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        th {
+            color: #64748b;
+            font-weight: 500;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        tr:hover {
+            background-color: #f8fafc;
+        }
+        .status-add    { color: #15803d; font-weight: 600; }
+        .status-delete { color: #b91c1c; font-weight: 600; }
+        .status-modify { color: #7c3aed; font-weight: 600; }
+        .status-rename,
+        .status-copy   { color: #1e40af; font-weight: 600; }
+
+        .branch-name {
+            font-family: ui-monospace, monospace;
+            background-color: #f1f5f9;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 14.5px;
+            color: #334155;
+        }
+        .file-path {
+            font-family: ui-monospace, monospace;
+            font-size: 14.5px;
+            color: #1e2937;
+        }
+        .similarity {
+            color: #64748b;
+            font-size: 13.5px;
+        }
+
+        footer {
+            text-align: center;
+            color: #94a3b8;
+            margin-top: 60px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- 头部信息 -->
+    <div class="header">
+        <h1 class="repo-header" th:text="'Git 仓库 ' + ${repoName} + ' 变更报告'"></h1>
+        <p style="color:#64748b; margin-top:8px; font-size:15px;">
+            生成时间：<span th:text="${reportDate}"></span>
+        </p>
+    </div>
+
+    <!-- 分支变更概览 -->
+    <div class="card">
+        <div class="section-title">
+            <i class="fas fa-code-branch"></i>
+            分支变更概览
+        </div>
+
+        <table th:if="${branchFileChanges != null and !branchFileChanges.branchFileChanges.isEmpty()}">
+            <thead>
+            <tr>
+                <th>分支名称</th>
+                <th>变更类型</th>
+                <th>文件变更数量</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="bfc : ${branchFileChanges.branchFileChanges}">
+                <td>
+                    <span class="branch-name" th:text="${bfc.branchName}"></span>
+                </td>
+                <td>
+                    <span th:text="${bfc.branchRefChange.status.name()}"></span>
+                </td>
+                <td th:text="${bfc.fileChanges.size()} + ' 个文件'"></td>
+            </tr>
+            </tbody>
+        </table>
+        <p th:if="${branchFileChanges == null or branchFileChanges.branchFileChanges.isEmpty()}"
+           style="color:#64748b; text-align:center; padding:60px 20px; font-size:15px;">
+            本次扫描暂无分支变更
+        </p>
+    </div>
+
+    <!-- 详细文件变更 -->
+    <div class="card" th:if="${branchFileChanges != null}">
+        <div class="section-title">
+            <i class="fas fa-file-alt"></i>
+            各分支文件变更明细
+        </div>
+
+        <div th:each="bfc : ${branchFileChanges.branchFileChanges}">
+            <h3 style="margin: 28px 0 14px 0; color:#1e2937; font-size:18px; font-weight:600;">
+                <i class="fas fa-code-branch"></i>
+                <span th:text="${bfc.branchName}"></span>
+                <small style="color:#64748b; margin-left:10px; font-weight:normal;"
+                       th:text="${bfc.branchRefChange.status.name()}"></small>
+            </h3>
+
+            <table>
+                <thead>
+                <tr>
+                    <th width="80">状态</th>
+                    <th>文件路径</th>
+                    <th width="200">变更描述</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="fc : ${bfc.fileChanges}">
+                    <td>
+                        <strong th:class="'status-' + ${fc.status.name().toLowerCase()}"
+                                th:text="${fc.status.desc}"></strong>
+                    </td>
+                    <td>
+                        <span class="file-path" th:text="${fc.newPath}"></span>
+                        <span th:if="${fc.oldPath != null}" class="similarity"
+                              th:text="' ← ' + ${fc.oldPath}"></span>
+                    </td>
+                    <td>
+                        <span th:text="${fc.toDescription()}" class="similarity"></span>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <footer>
+        Git Remote Repo Listener
+    </footer>
+</div>
+</body>
+</html>

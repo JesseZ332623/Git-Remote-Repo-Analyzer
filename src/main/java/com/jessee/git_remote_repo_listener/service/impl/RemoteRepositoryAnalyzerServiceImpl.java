@@ -1,0 +1,148 @@
+package com.jessee.git_remote_repo_listener.service.impl;
+
+import com.jessee.git_remote_repo_listener.cache.RemoteRepositoryAnalyzerCacher;
+import com.jessee.git_remote_repo_listener.component.RemoteRepositoryAnalyzer;
+import com.jessee.git_remote_repo_listener.pojo.AnalyzeResult;
+import com.jessee.git_remote_repo_listener.pojo.BranchFileChange;
+import com.jessee.git_remote_repo_listener.pojo.BranchFileChanges;
+import com.jessee.git_remote_repo_listener.pojo.BranchRefChange;
+import com.jessee.git_remote_repo_listener.properties.RepoPathProperties;
+import com.jessee.git_remote_repo_listener.service.AnalyzeResultPersister;
+import com.jessee.git_remote_repo_listener.service.RemoteRepositoryAnalyzerService;
+import com.jessee.git_remote_repo_listener.utils.RemoteSnapshotUtils;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Map;
+
+/** 远程仓库分析服务类实现。*/
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class RemoteRepositoryAnalyzerServiceImpl
+    implements RemoteRepositoryAnalyzerService
+{
+    /** 本地待分析仓库路径配置。*/
+    private final RepoPathProperties repoPathProperties;
+
+    /** Git 远程仓库分析器接口。*/
+    private final RemoteRepositoryAnalyzer remoteRepositoryAnalyzer;
+
+    /** 远程仓库分析器服务缓存接口。*/
+    private final RemoteRepositoryAnalyzerCacher cacher;
+
+    /** 分析结果持久化器。*/
+    private final AnalyzeResultPersister analyzeResultPersister;
+
+    /** 查询本地仓库每个分支的最新提交哈希，并将该结果缓存至 Redis。*/
+    private Mono<Void>
+    queryForEachRef(RepoPathProperties.RepoConfig repo)
+    {
+        final String localRepoPath = repo.getPath();
+        final String repoRemote    = repo.getRemote();
+
+        return
+        this.remoteRepositoryAnalyzer
+            .gitForeachRef(localRepoPath, repoRemote)
+            .flatMap((forEachRefs) ->
+                this.cacher.cacheForEachRefsMap(repo, forEachRefs))
+            .then();
+    }
+
+    /** 从远程仓库拉取变更信息。*/
+    private Mono<Void> fetchRemote(String localRepoPath) {
+        return this.remoteRepositoryAnalyzer.gitFetch(localRepoPath);
+    }
+
+    /** 查询当前本地仓库每个分支的最新提交哈希并与上一个快照进行比对。*/
+    private Mono<Map<String, BranchRefChange>>
+    compareForEachRef(RepoPathProperties.RepoConfig repo)
+    {
+        final String localRepoPath = repo.getPath();
+        final String repoRemote    = repo.getRemote();
+
+        return
+        Mono.zip(
+                this.cacher.getForEachRefsMap(repo),
+                this.remoteRepositoryAnalyzer
+                    .gitForeachRef(localRepoPath, repoRemote)
+            )
+            .flatMap((tuple) ->
+                RemoteSnapshotUtils.compareRemoteHash(tuple.getT1(), tuple.getT2()));
+    }
+
+    /** 查询并解析有更新的远程分支的详细文件变更状态。*/
+    private Mono<List<BranchFileChange>>
+    makeBranchFileChangeList(
+        final RepoPathProperties.RepoConfig repoConfig,
+        final Map<String, BranchRefChange> refChangeMap
+    )
+    {
+        // 如果上游的 refChangeMap 为空，
+        // 则意味着分支状态完全同步，从缓存返回结果即可。
+        if (refChangeMap.isEmpty()) {
+            return this.cacher.getBranchFileChanges(repoConfig);
+        }
+
+        return
+        Flux.fromIterable(refChangeMap.entrySet())
+            .flatMap((refChangeEntry) ->
+                this.remoteRepositoryAnalyzer
+                    .gitDiff(repoConfig.getPath(), refChangeEntry.getValue())
+                    .map((fileChanges) ->
+                        BranchFileChange.of(
+                            refChangeEntry.getKey(),
+                            refChangeEntry.getValue(),
+                            fileChanges
+                        )
+                    )
+            )
+            .collectList()
+            .flatMap((branchFileChanges) ->
+                this.cacher
+                    .cacheBranchFileChanges(repoConfig, branchFileChanges)
+                    .thenReturn(branchFileChanges)
+            );
+    }
+
+    @Override
+    public Mono<AnalyzeResult> doAnalysis()
+    {
+        return
+        Mono.defer(() -> {
+            final LocalDateTime ayalyzDateTime
+                = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES);
+
+            return
+            Flux.fromIterable(this.repoPathProperties.getRepos())
+                .flatMap((repo) ->
+                    this.queryForEachRef(repo)
+                        .then(this.fetchRemote(repo.getPath()))
+                        .then(this.compareForEachRef(repo))
+                        .flatMap((refChangeMap) ->
+                            this.makeBranchFileChangeList(repo, refChangeMap)
+                                .map((list) ->
+                                    BranchFileChanges.of(repo, list))
+                        )
+                        .doOnError((exception) ->
+                            log.error(
+                                "Analysis local repository {}, remote {} failed.",
+                                repo.getPath(), repo.getRemote(),
+                                exception
+                            )
+                        )
+                )
+                .collectList()
+                .flatMap((analyzeResults) ->
+                   this.analyzeResultPersister.save(ayalyzDateTime, analyzeResults)
+                       .thenReturn(new AnalyzeResult(ayalyzDateTime, analyzeResults))
+                );
+        });
+    }
+}

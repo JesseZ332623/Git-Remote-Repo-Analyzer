@@ -20,4 +20,12 @@ public class AnalyzeRecord extends BaseEntity
 {
     @Column(value = "analyze_datetime")
     private LocalDateTime analyzeDateTime;
+
+    @Column(value = "is_completed")
+    private String isCompleted;
+
+    /** 本次分析是否已经完成？ */
+    public boolean completed() {
+        return "Y".equals(this.isCompleted);
+    }
 }

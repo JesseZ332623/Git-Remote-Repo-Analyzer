@@ -116,32 +116,37 @@ public class RemoteRepositoryAnalyzerServiceImpl
     {
         return
         Mono.defer(() -> {
-            final LocalDateTime ayalyzDateTime
+            final LocalDateTime analyzeDateTime
                 = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES);
 
             return
-            Flux.fromIterable(this.repoPathProperties.getRepos())
-                .flatMap((repo) ->
-                    this.queryForEachRef(repo)
-                        .then(this.fetchRemote(repo.getPath()))
-                        .then(this.compareForEachRef(repo))
-                        .flatMap((refChangeMap) ->
-                            this.makeBranchFileChangeList(repo, refChangeMap)
-                                .map((list) ->
-                                    BranchFileChanges.of(repo, list))
+            this.analyzeResultPersister.saveAnalyzeRecord(analyzeDateTime)
+                .flatMap((analyzeId) ->
+                    Flux.fromIterable(this.repoPathProperties.getRepos())
+                        .flatMap((repo) ->
+                            this.queryForEachRef(repo)
+                                .then(this.fetchRemote(repo.getPath()))
+                                .then(this.compareForEachRef(repo))
+                                .flatMap((refChangeMap) ->
+                                    this.makeBranchFileChangeList(repo, refChangeMap)
+                                        .map((list) ->
+                                            BranchFileChanges.of(repo, list))
+                                )
+                                .doOnError((exception) ->
+                                    log.error(
+                                        "Analysis local repository {}, remote {} failed.",
+                                        repo.getPath(), repo.getRemote(),
+                                        exception
+                                    )
+                                )
+                                // 如果其中一个仓库的分析失败了，不要中断整个任务
+                                .onErrorResume((exception) -> Mono.empty())
                         )
-                        .doOnError((exception) ->
-                            log.error(
-                                "Analysis local repository {}, remote {} failed.",
-                                repo.getPath(), repo.getRemote(),
-                                exception
-                            )
+                        .collectList()
+                        .flatMap((analyzeResults) ->
+                            this.analyzeResultPersister.save(analyzeId, analyzeDateTime, analyzeResults)
+                                .thenReturn(new AnalyzeResult(analyzeDateTime, analyzeResults))
                         )
-                )
-                .collectList()
-                .flatMap((analyzeResults) ->
-                   this.analyzeResultPersister.save(ayalyzDateTime, analyzeResults)
-                       .thenReturn(new AnalyzeResult(ayalyzDateTime, analyzeResults))
                 );
         });
     }

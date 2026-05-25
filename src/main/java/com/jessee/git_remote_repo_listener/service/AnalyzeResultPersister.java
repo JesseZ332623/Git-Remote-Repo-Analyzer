@@ -10,9 +10,25 @@ import java.util.List;
 public interface AnalyzeResultPersister
 {
     /**
+     * 保存一条分析记录数据，最开始 is_complete 字段会被设为 N。
+     *
+     * @param analyzeDateTime   上游给出的分析开始时间
+     *
+     * @return 分析记录 ID
+     */
+    Mono<Long> saveAnalyzeRecord(LocalDateTime analyzeDateTime);
+
+    /**
      * 将 {@link RemoteRepositoryAnalyzerService#doAnalysis()}
      * 的分析结果持久化到数据库。
+     *
+     * @param analyzeId         上游给出的分析记录 ID
+     * @param analyzeDateTime   上游给出的分析开始时间
+     * @param analyzeResults    上游给出的分析结果
      */
-    Mono<Void>
-    save(LocalDateTime ayalyzDateTime, List<BranchFileChanges> analyzeResults);
+    Mono<Void> save(
+        final Long                    analyzeId,
+        final LocalDateTime           analyzeDateTime,
+        final List<BranchFileChanges> analyzeResults
+    );
 }

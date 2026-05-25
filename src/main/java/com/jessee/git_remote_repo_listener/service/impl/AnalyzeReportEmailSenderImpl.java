@@ -12,7 +12,6 @@ import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringWebFluxTemplateEngine;
 import reactor.core.publisher.Mono;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -59,19 +58,16 @@ public class AnalyzeReportEmailSenderImpl implements AnalyzeReportEmailSender
     sendAnalysisReportMail(String repositoryName, String recipient, String htmlMainText)
     {
         return
-        Mono.delay(Duration.ofMillis(200L))
-            .then(
-                EmailContent.fromHtml(recipient, REPORT_SUBJECT, htmlMainText)
-                    .flatMap(this.emailSender::sendEmail)
-                    .doOnSuccess((ignore) ->
-                        log.info(
-                            "Complete to send repository {} analyze report email to {}",
-                            repositoryName, recipient
-                        )
-                    )
-                // 邮件依赖会抛出自己的异常，后续可以转化成定时任务专用的异常
-                // .onErrorResume();
+        EmailContent.fromHtml(recipient, REPORT_SUBJECT, htmlMainText)
+            .flatMap(this.emailSender::sendEmail)
+            .doOnSuccess((ignore) ->
+                log.info(
+                    "Complete to send repository {} analyze report email to {}",
+                    repositoryName, recipient
+                )
             );
+        // 邮件依赖会抛出自己的异常，后续可以转化成定时任务专用的异常
+        // .onErrorResume();
     }
 
     private Mono<String>

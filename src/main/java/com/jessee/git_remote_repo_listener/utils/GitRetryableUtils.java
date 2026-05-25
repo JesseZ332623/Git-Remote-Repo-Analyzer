@@ -24,6 +24,7 @@ public final class GitRetryableUtils
         "Remote end hung up unexpectedly",
         "RPC failed",
         "curl",
+        "TLS connect error",
         // 锁文件（并发操作导致，稍后重试可能成功）
         "Unable to create '",
         // 临时性远端问题

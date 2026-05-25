@@ -56,6 +56,7 @@ public class AnalyzeResultPersisterImpl implements AnalyzeResultPersister
     private final GlobalIdConsumer globalIdConsumer;
 
     /** 往 analyze_record 表中写入分析记录数据，返回 ID。*/
+    @Override
     public Mono<Long>
     saveAnalyzeRecord(LocalDateTime ayalyzDateTime)
     {
@@ -67,10 +68,12 @@ public class AnalyzeResultPersisterImpl implements AnalyzeResultPersister
 
                 analyzeRecord.setId(id);
                 analyzeRecord.setIsNew(true);
+                analyzeRecord.setIsCompleted("N");
 
                 return
                 this.analyzeRecordMapper
-                    .save(analyzeRecord.setAnalyzeDateTime(ayalyzDateTime));
+                    .save(analyzeRecord.setAnalyzeDateTime(ayalyzDateTime))
+                    .as(this.transactionalOperator::transactional);
             })
             .map((analyzeRecord) ->
                 Objects.requireNonNull(analyzeRecord.getId()));
@@ -276,77 +279,77 @@ public class AnalyzeResultPersisterImpl implements AnalyzeResultPersister
      * 的分析结果持久化到数据库。
      */
     @Override
-    public Mono<Void>
-    save(LocalDateTime ayalyzDateTime, List<BranchFileChanges> analyzeResults)
+    public Mono<Void> save(
+        final Long                    analyzeId,
+        final LocalDateTime           ayalyzDateTime,
+        final List<BranchFileChanges> analyzeResults
+    )
     {
         return
-        this.saveAnalyzeRecord(ayalyzDateTime)
-            .flatMap((analyzeId) ->
-                Flux.fromIterable(analyzeResults).concatMap((branchFileChanges) ->
-                    this.saveRepository(analyzeId, branchFileChanges.getRepoConfig())
-                        .flatMap((repositoryId) -> {
-                            final List<String> branchNames
+        Flux.fromIterable(analyzeResults).flatMap((branchFileChanges) ->
+            this.saveRepository(analyzeId, branchFileChanges.getRepoConfig())
+                .flatMap((repositoryId) -> {
+                    final List<String> branchNames
+                        = branchFileChanges.getBranchFileChanges()
+                            .stream()
+                            .map(BranchFileChange::getBranchName)
+                            .toList();
+
+                    return
+                    this.saveBranchs(analyzeId, repositoryId, branchNames, ayalyzDateTime)
+                        .flatMap((branchIds) -> {
+                            final List<BranchRefChange> branchRefChanges
                                 = branchFileChanges.getBranchFileChanges()
                                     .stream()
-                                    .map(BranchFileChange::getBranchName)
+                                    .map(BranchFileChange::getBranchRefChange)
                                     .toList();
 
+                            final Map<Long, List<FileChange>> branchFileChangesMap
+                                = IntStream.range(
+                                    0,
+                                    Math.min(
+                                        branchIds.size(),
+                                        branchFileChanges.getBranchFileChanges().size()
+                                    )
+                                )
+                                .mapToObj((index) ->
+                                    Map.entry(
+                                        branchIds.get(index),
+                                        branchFileChanges.getBranchFileChanges()
+                                            .get(index)
+                                            .getFileChanges()
+                                    )
+                                )
+                                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+
                             return
-                            this.saveBranchs(analyzeId, repositoryId, branchNames, ayalyzDateTime)
-                                .flatMap((branchIds) -> {
-                                    final List<BranchRefChange> branchRefChanges
-                                        = branchFileChanges.getBranchFileChanges()
-                                            .stream()
-                                            .map(BranchFileChange::getBranchRefChange)
-                                            .toList();
+                            this.saveBranchRefChanges(
+                                analyzeId, repositoryId, branchIds,
+                                branchRefChanges
+                            ).then(
+                                Flux.fromIterable(branchFileChangesMap.entrySet())
+                                    .flatMap((entry) -> {
+                                        final Long branchId = entry.getKey();
+                                        final List<FileChange> fileChanges = entry.getValue();
 
-                                    final Map<Long, List<FileChange>> branchFileChangesMap
-                                        = IntStream.range(
-                                            0,
-                                            Math.min(
-                                                branchIds.size(),
-                                                branchFileChanges.getBranchFileChanges().size()
-                                            )
-                                        )
-                                        .mapToObj((index) ->
-                                                Map.entry(
-                                                    branchIds.get(index),
-                                                    branchFileChanges.getBranchFileChanges()
-                                                        .get(index)
-                                                        .getFileChanges()
-                                                )
-                                        )
-                                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-
-                                    return
-                                    this.saveBranchRefChanges(
-                                        analyzeId, repositoryId, branchIds,
-                                            branchRefChanges
-                                        )
-                                        .then(
-                                            Flux.fromIterable(branchFileChangesMap.entrySet())
-                                                .flatMap((entry) -> {
-                                                    final Long branchId = entry.getKey();
-                                                    final List<FileChange> fileChanges = entry.getValue();
-
-                                                    return
-                                                    this.saveBranchFileChanges(
-                                                        analyzeId, repositoryId, branchId,
-                                                        fileChanges
-                                                    );
-                                                })
-                                                .collectList()
-                                                .then()
+                                        return
+                                        this.saveBranchFileChanges(
+                                            analyzeId, repositoryId, branchId,
+                                            fileChanges
                                         );
-                                });
-                        })
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .as(this.transactionalOperator::transactional)
-                    )
-                    .collectList()
-                    .then()
-                    .doOnError(e -> log.error("Save failed", e))
-            );
+                                    })
+                                    .collectList()
+                                    .then()
+                            );
+                        });
+                })
+                .then(this.analyzeRecordMapper.setAnalyzComplete(analyzeId))
+                .subscribeOn(Schedulers.boundedElastic())
+                .as(this.transactionalOperator::transactional)
+            )
+            .collectList()
+            .then()
+            .doOnError(e -> log.error("Save failed", e));
     }
 }

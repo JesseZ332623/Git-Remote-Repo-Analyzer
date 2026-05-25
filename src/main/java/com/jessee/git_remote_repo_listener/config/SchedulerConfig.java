@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Configuration;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 
@@ -23,5 +24,17 @@ public class SchedulerConfig
         return Schedulers.fromExecutorService(
             Executors.newThreadPerTaskExecutor(vthreadFactory)
         );
+    }
+
+    @Bean(name = "GitOutputReaderExecuterService")
+    public ExecutorService gitOutputReaderExecuterService()
+    {
+        // 虚拟线程工厂
+        final ThreadFactory factory
+            = Thread.ofVirtual()
+                    .name("git-output-reader-", 0)  // 自动编号
+                    .factory();
+
+        return Executors.newThreadPerTaskExecutor(factory);
     }
 }

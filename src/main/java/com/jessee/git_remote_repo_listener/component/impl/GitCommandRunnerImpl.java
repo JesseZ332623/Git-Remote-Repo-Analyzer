@@ -1,6 +1,7 @@
 package com.jessee.git_remote_repo_listener.component.impl;
 
 import com.jessee.git_remote_repo_listener.component.GitCommandRunner;
+import com.jessee.git_remote_repo_listener.exception.ClientAbortException;
 import com.jessee.git_remote_repo_listener.exception.GitRetryableException;
 import com.jessee.git_remote_repo_listener.properties.GitCommandRunnerProperties;
 import com.jessee.git_remote_repo_listener.utils.GitRetryableUtils;
@@ -16,11 +17,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.*;
 
 /** 响应式 Git 命令执行器实现。*/
 @Slf4j
@@ -32,8 +29,9 @@ public class GitCommandRunnerImpl implements GitCommandRunner
     @Qualifier(value = "GitWorkerScheduler")
     private final Scheduler scheduler;
 
-    /** readerThread 的递增唯一编号。*/
-    private final AtomicInteger readerCounter = new AtomicInteger(0);
+    /** asyncOutputRead() 方法专用执行器。*/
+    @Qualifier(value = "GitOutputReaderExecuterService")
+    private final ExecutorService executorService;
 
     /** Git 命令执行器配置参数。*/
     private final GitCommandRunnerProperties properties;
@@ -47,68 +45,70 @@ public class GitCommandRunnerImpl implements GitCommandRunner
      *
      * @param process 已经调用 processBuilder.start() 启动的进程实例
      * @param timeout 分配给线程读取缓冲区的时间（一般是总超时期限的一半）
+     * @param commandLine 执行的 git 命令（调试用）
      */
     private String
-    asyncOutputRead(Process process, Duration timeout)
+    asyncOutputRead(Process process, Duration timeout, String commandLine)
+        throws TimeoutException, InterruptedException
     {
         // 如果管理本异步读取线程的闭锁 wait() 操作超时，
         // 后续的结果读取很有可能会得到脏数据，所以面对这个写多读少的环境，
         // 使用 StringBuffer 是最简单有效的。
         final StringBuffer outputBuilder = new StringBuffer();
 
-        // 使用一个闭锁来控制本线程的等待时间，比 join() 死等更灵活。
-        final CountDownLatch latch = new CountDownLatch(1);
+        // 使用期值管理读取任务，比裸露的虚拟线程 + 闭锁更智能
+        final CompletableFuture<String> future
+            = CompletableFuture.supplyAsync(
+                () -> {
+                    try (var reader = process.getInputStream())
+                    {
+                        final byte[] buffer = new byte[this.properties.getAsyncBufferSize()];
+                        int bytesRead;
+                        int totalByetsRead = 0;
 
-        final Thread readerThread
-            = Thread.ofVirtual()
-                    .name("git-output-reader-", this.readerCounter.incrementAndGet())
-                    .start(() -> {
-                        try (var reader = process.getInputStream())
+                        while ((bytesRead = reader.read(buffer)) != -1)
                         {
-                            final byte[] buffer = new byte[this.properties.getAsyncBufferSize()];
-                            int bytesRead;
+                            outputBuilder.append(
+                                new String(buffer, 0, bytesRead, StandardCharsets.UTF_8)
+                            );
 
-                            while ((bytesRead = reader.read(buffer)) != -1)
-                            {
-                                outputBuilder.append(
-                                    new String(buffer, 0, bytesRead, StandardCharsets.UTF_8)
-                                );
-                            }
+                            totalByetsRead += bytesRead;
                         }
-                        catch (IOException exception)
-                        {
-                            // 如果是外部主动中断的，则不需要日志记录，
-                            // 反之才是真正的 I/O 错误
-                            if (!Thread.currentThread().isInterrupted()) {
-                                log.warn("Failed to read git output.", exception);
-                            }
-                        }
-                        finally {
-                            // 不论读取失败与否，都释放闭锁
-                            latch.countDown();
-                        }
-                    });
+
+                        log.info(
+                            "Execute command [{}], total read [{}] bytes.",
+                            commandLine, totalByetsRead
+                        );
+                    }
+                    catch (IOException exception) {
+                        throw new RuntimeException(exception);
+                    }
+
+                    return outputBuilder.toString();
+                },
+                this.executorService
+        );
 
         try
         {
             // 等待读取线程，最多等待 timeout
-            final boolean finished
-                = latch.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
-
-            if (!finished)
-            {
-                log.warn("Git output reader thread timed out.");
-                readerThread.interrupt();
-            }
+            return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         }
-        catch (InterruptedException exception)
+        catch (ExecutionException exception)
         {
-            log.warn("Output reader thread was interrupted.", exception);
-            Thread.currentThread().interrupt();
-            readerThread.interrupt();
-        }
+            final Throwable cause = exception.getCause();
 
-        return outputBuilder.toString();
+            if (cause instanceof InterruptedException) {
+                throw (InterruptedException) cause;
+            }
+
+            throw new RuntimeException("Failed to read output", cause);
+        }
+        catch (TimeoutException exception)
+        {
+            future.cancel(true);
+            throw exception;
+        }
     }
 
     @Override
@@ -136,7 +136,7 @@ public class GitCommandRunnerImpl implements GitCommandRunner
                 final long readTimeoutMs = processWaitTimeMs / 2L;
 
                 final String output
-                    = this.asyncOutputRead(process, Duration.ofMillis(readTimeoutMs));
+                    = this.asyncOutputRead(process, Duration.ofMillis(readTimeoutMs), commandLine);
 
                 final long remaingMs
                     = deadline - System.currentTimeMillis();
@@ -203,6 +203,12 @@ public class GitCommandRunnerImpl implements GitCommandRunner
             return
             Mono.fromCallable(task)
                 .retryWhen(retryStrategy)
-                .subscribeOn(this.scheduler);
+                .subscribeOn(this.scheduler)
+                // 试图让中断异常能被传播出去
+                .onErrorMap(
+                    InterruptedException.class,
+                    (interrupted) ->
+                        new ClientAbortException(interrupted.getMessage(), interrupted)
+                );
     }
 }

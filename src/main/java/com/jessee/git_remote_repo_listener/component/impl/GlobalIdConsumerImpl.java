@@ -1,7 +1,7 @@
 package com.jessee.git_remote_repo_listener.component.impl;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jessee.git_remote_repo_listener.component.GlobalIdConsumer;
 import com.jessee.git_remote_repo_listener.properties.IdConsumerProperties;
@@ -14,12 +14,18 @@ import org.jetbrains.annotations.NotNull;
 import org.reactivestreams.Publisher;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.List;
+import java.util.Spliterator;
 import java.util.function.Function;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static com.jessee.git_remote_repo_listener.constant.LuaScriptOperatorType.GLOBAL_ID_CONSUMER;
 
@@ -46,6 +52,9 @@ public class GlobalIdConsumerImpl implements GlobalIdConsumer
     /** Jackson 对象映射器。*/
     private final ObjectMapper mapper;
 
+    /** 响应式 HTTP 客户端。*/
+    private final WebClient webClient;
+
     /** 构造在全局 ID 池短暂枯竭时的重试策略。*/
     private @NotNull Function<Flux<Long>, ? extends Publisher<?>> repeatStrategy()
     {
@@ -68,23 +77,62 @@ public class GlobalIdConsumerImpl implements GlobalIdConsumer
 
     private Mono<List<Long>> parseIdsJson(String JSON)
     {
-        return Mono.fromCallable(() -> {
-            try
-            {
+        return Mono.fromCallable(() ->
+            this.mapper
+                .readValue(JSON, new TypeReference<List<String>>() {})
+                .stream()
+                .map((idStr) -> idStr.substring(1, idStr.length() - 1))
+                .map(Long::parseLong)
+                .toList()
+        );
+    }
+
+    private Mono<Long> nextIdDirectory()
+    {
+        return
+        this.webClient.get()
+            .uri(URI.create(this.properties.getDirectoryUrls().getNext()))
+            .retrieve()
+            .bodyToMono(String.class)
+            .flatMap((body) ->
+                Mono.fromCallable(() ->
+                    mapper.readTree(body).get("data").asLong()))
+            .onErrorResume((exception) -> {
+                log.error("", exception);
+                return Mono.empty();
+            });
+    }
+
+    private Mono<List<Long>> nextBatchIdsDirectory(int batchSize)
+    {
+        final String uri
+            = this.properties.getDirectoryUrls()
+                  .getNextBatch() + "?size=" + batchSize;
+
+        return
+        this.webClient.get()
+            .uri(URI.create(uri))
+            .retrieve()
+            .bodyToMono(String.class)
+            .flatMap((body) -> {
+                log.info("{}", body);
+
                 return
-                this.mapper
-                    .readValue(JSON, new TypeReference<List<String>>() {})
-                    .stream()
-                    .map((idStr) -> idStr.substring(1, idStr.length() - 1))
-                    .map(Long::parseLong)
-                    .toList();
-            }
-            catch (JsonProcessingException exception)
-            {
-                log.error("{}", exception.getMessage(), exception);
-                return List.of();
-            }
-        });
+                Mono.fromCallable(() -> {
+                    final Spliterator<JsonNode> spliterator
+                        = this.mapper.readTree(body).get("data")
+                              .spliterator();
+
+                    return
+                    StreamSupport.stream(spliterator, false)
+                        .map(JsonNode::asLong)
+                        .toList();
+                });
+            })
+            .onErrorResume((exception) -> {
+                log.error("", exception);
+                return Mono.empty();
+            });
     }
 
     /** 获取下一个 ID。*/
@@ -96,11 +144,12 @@ public class GlobalIdConsumerImpl implements GlobalIdConsumer
         final Duration blockTimeout = this.properties.getBlockTimeout();
 
         return
-            this.redisTemplate.opsForList()
-                .rightPop(globalIdKey, blockTimeout)
-                .map(String::valueOf)
-                .map(Long::parseLong)
-                .repeatWhenEmpty(maxRetries, this.repeatStrategy());
+        this.redisTemplate.opsForList()
+            .rightPop(globalIdKey, blockTimeout)
+            .map(String::valueOf)
+            .map(Long::parseLong)
+            .switchIfEmpty(this.nextIdDirectory())
+            .repeatWhenEmpty(maxRetries, this.repeatStrategy());
     }
 
     /** 获取下一批 ID。*/
@@ -131,7 +180,29 @@ public class GlobalIdConsumerImpl implements GlobalIdConsumer
                                 result.getStatus(), result.getMessage()
                             );
 
-                            return this.parseIdsJson(result.getData());
+                            // 如果本次调用发现 ID 池完全枯竭了，直接直连
+                            if (!StringUtils.hasText(result.getData())) {
+                                return this.nextBatchIdsDirectory(batchSize);
+                            }
+
+                            return
+                            this.parseIdsJson(result.getData())
+                                .flatMap((ids) -> {
+                                    final int elements   = ids.size();
+                                    final int requestelements = batchSize - elements;
+
+                                    if (requestelements != 0)
+                                    {
+                                        return
+                                        this.nextBatchIdsDirectory(requestelements)
+                                            .map((requestIds) ->
+                                                Stream.concat(ids.stream(), requestIds.stream())
+                                                      .toList()
+                                            );
+                                    }
+
+                                    return Mono.just(ids);
+                                });
                         }
                         else
                         {

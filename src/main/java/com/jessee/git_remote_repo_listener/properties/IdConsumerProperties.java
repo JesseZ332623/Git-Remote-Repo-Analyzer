@@ -30,4 +30,19 @@ public class IdConsumerProperties
 
     /** 指数退避封顶时间。*/
     private Duration maxBackoff;
+
+    /** 直接生成端点。*/
+    private DirectoryUrls directoryUrls;
+
+    @Data
+    @ToString
+    @EqualsAndHashCode
+    public static class DirectoryUrls
+    {
+        /** 直接生成一条 ID 的服务端点。*/
+        private String next;
+
+        /** 直接生成一批 ID 的服务端点。*/
+        private String nextBatch;
+    }
 }

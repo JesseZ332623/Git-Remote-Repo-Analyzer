@@ -43,6 +43,9 @@ app:
     retries: 3
     start-backoff: 100ms
     max-backoff: 500ms
+    directory-urls:
+      next: http://localhost:65533/api/id_allocator/next
+      next-batch: http://localhost:65533/api/id_allocator/next-batch
 
   # 本地待分析仓库路径数组
   local-repository-path:

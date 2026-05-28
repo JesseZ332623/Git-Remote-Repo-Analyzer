@@ -64,11 +64,15 @@ public class EmailRecipientCacherImpl implements EmailRecipientCacher
         this.redisTemplate.opsForHash()
             .entries(RECIPIENT_CACHE_KEY)
             .switchIfEmpty(
-                Mono.error(
-                    new NoSuchElementException(
-                        "No recipient address in key: " + RECIPIENT_CACHE_KEY
-                    )
-                )
+                Mono.fromCallable(() -> {
+                    log.warn(
+                        "No recipient address in key: {}, use defalt value.",
+                        RECIPIENT_CACHE_KEY
+                    );
+
+                    // 缓存如果没有任何收件人，就先发到我这里，避免丢件
+                    return Map.entry("Jesse", "zhj3191955858@gmail.com");
+                })
             )
             .map(Map.Entry::getValue)
             .cast(String.class)

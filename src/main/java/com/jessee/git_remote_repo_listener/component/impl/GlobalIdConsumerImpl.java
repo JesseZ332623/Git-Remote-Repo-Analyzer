@@ -114,10 +114,7 @@ public class GlobalIdConsumerImpl implements GlobalIdConsumer
             .uri(URI.create(uri))
             .retrieve()
             .bodyToMono(String.class)
-            .flatMap((body) -> {
-                log.info("{}", body);
-
-                return
+            .flatMap((body) ->
                 Mono.fromCallable(() -> {
                     final Spliterator<JsonNode> spliterator
                         = this.mapper.readTree(body).get("data")
@@ -127,8 +124,8 @@ public class GlobalIdConsumerImpl implements GlobalIdConsumer
                     StreamSupport.stream(spliterator, false)
                         .map(JsonNode::asLong)
                         .toList();
-                });
-            })
+                })
+            )
             .onErrorResume((exception) -> {
                 log.error("", exception);
                 return Mono.empty();

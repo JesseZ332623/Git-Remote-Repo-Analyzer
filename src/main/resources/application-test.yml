@@ -68,6 +68,12 @@ app:
       - path: E:\kafka
         remote: origin
 
+  # 分析记录邮件发送限流配置
+  email-send-concurrent:
+    # 最多同时处理的收件人数量
+    max-recipients: 2
+    # 发送邮件前需要延迟的时间
+    each-send-delay: 100ms
 
   # Git 命令执行器配置参数
   git-command-runner:

@@ -1,6 +1,7 @@
-package com.jessee.git_remote_repo_listener.service;
+package com.jessee.git_remote_repo_listener.service.persistence;
 
 import com.jessee.git_remote_repo_listener.pojo.BranchFileChanges;
+import com.jessee.git_remote_repo_listener.service.RemoteRepositoryAnalyzerService;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;

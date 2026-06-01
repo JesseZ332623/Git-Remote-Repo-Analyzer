@@ -2,6 +2,7 @@ package com.jessee.git_remote_repo_listener.controller;
 
 import com.jessee.git_remote_repo_listener.cache.EmailRecipientCacher;
 import com.jessee.git_remote_repo_listener.pojo.AnalyzeResult;
+import com.jessee.git_remote_repo_listener.properties.EmailSendConcurrentProperties;
 import com.jessee.git_remote_repo_listener.properties.RepoPathProperties;
 import com.jessee.git_remote_repo_listener.response.CustomizedResponse;
 import com.jessee.git_remote_repo_listener.service.AnalyzeReportEmailSender;
@@ -33,16 +34,24 @@ import static java.lang.String.format;
 public class RemoteRepositoryAnalyzeController
 {
     /** 邮件收件人缓存类接口。*/
-    private final EmailRecipientCacher cacher;
+    private final
+    EmailRecipientCacher cacher;
 
     /** 远程仓库分析服务类接口。*/
-    private final RemoteRepositoryAnalyzerService remoteRepositoryAnalyzerService;
+    private final
+    RemoteRepositoryAnalyzerService remoteRepositoryAnalyzerService;
 
     /** 分析报告邮件发送器接口。*/
-    private final AnalyzeReportEmailSender analyzeReportEmailSender;
+    private final
+    AnalyzeReportEmailSender analyzeReportEmailSender;
 
     /** 本地待分析仓库路径配置类。*/
-    private final RepoPathProperties repoPathProperties;
+    private final
+    RepoPathProperties repoPathProperties;
+
+    /** 分析记录邮件发送限流配置。*/
+    private final
+    EmailSendConcurrentProperties emailSendConcurrentProperties;
 
     /** 表示异步任务是否在执行的标志位。*/
     @Qualifier(value = "AnalyzeRunningFlag")
@@ -85,17 +94,18 @@ public class RemoteRepositoryAnalyzeController
         ).flatMap((tuple) -> {
             final List<String> recipients     = tuple.getT1();
             final AnalyzeResult analyzeResult = tuple.getT2();
+            final int maxRecipients      = this.emailSendConcurrentProperties.getMaxRecipients();
+            final Duration eachSendDelay = this.emailSendConcurrentProperties.getEachSendDelay();
 
             return
             Flux.fromIterable(recipients)
                 .flatMap((recipient)  ->
                     Flux.fromIterable(analyzeResult.getAyalyzResult())
-                        .switchOnFirst((first, flux) ->
-                            flux.delayElements(Duration.ofMillis(100L)))
-                        .flatMap((branchFileChanges) ->
+                        .delayElements(eachSendDelay)
+                        .concatMap((branchFileChanges) ->
                             this.analyzeReportEmailSender
                                 .send(recipient, analyzeResult.getAnalyzDateTime(), branchFileChanges)
-                        )
+                        ), maxRecipients
                 ).collectList();
         })
         .then(

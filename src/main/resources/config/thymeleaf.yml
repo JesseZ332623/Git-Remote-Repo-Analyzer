@@ -1,0 +1,6 @@
+# Thymeleaf 框架属性配置
+
+# Thymeleaf 模板存放路径
+app:
+  thymeleaf:
+    prefix: templates/mail/

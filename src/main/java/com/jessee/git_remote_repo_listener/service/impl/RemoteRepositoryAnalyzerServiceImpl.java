@@ -7,7 +7,7 @@ import com.jessee.git_remote_repo_listener.pojo.BranchFileChange;
 import com.jessee.git_remote_repo_listener.pojo.BranchFileChanges;
 import com.jessee.git_remote_repo_listener.pojo.BranchRefChange;
 import com.jessee.git_remote_repo_listener.properties.RepoPathProperties;
-import com.jessee.git_remote_repo_listener.service.AnalyzeResultPersister;
+import com.jessee.git_remote_repo_listener.service.persistence.AnalyzeResultPersister;
 import com.jessee.git_remote_repo_listener.service.RemoteRepositoryAnalyzerService;
 import com.jessee.git_remote_repo_listener.utils.RemoteSnapshotUtils;
 import lombok.RequiredArgsConstructor;

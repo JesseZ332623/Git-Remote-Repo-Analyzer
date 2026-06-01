@@ -47,6 +47,13 @@ app:
       next: http://localhost:65533/api/id_allocator/next
       next-batch: http://localhost:65533/api/id_allocator/next-batch
 
+  # 数据库的限流背压配置
+  database-concurrent:
+    # 限制仓库并发数
+    max-repos: 2
+    # 限制文件变更并发数
+    max-file-changes: 100
+
   # 本地待分析仓库路径数组
   local-repository-path:
     repos:

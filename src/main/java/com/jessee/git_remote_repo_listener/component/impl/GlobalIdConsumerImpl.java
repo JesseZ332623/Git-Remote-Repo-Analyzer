@@ -178,14 +178,15 @@ public class GlobalIdConsumerImpl implements GlobalIdConsumer
                             );
 
                             // 如果本次调用发现 ID 池完全枯竭了，直接直连
-                            if (!StringUtils.hasText(result.getData())) {
+                            //（注意：Lua 脚本返回 root object 表示池中没有 ID）
+                            if ("{}".equals(result.getData())) {
                                 return this.nextBatchIdsDirectory(batchSize);
                             }
 
                             return
                             this.parseIdsJson(result.getData())
                                 .flatMap((ids) -> {
-                                    final int elements   = ids.size();
+                                    final int elements        = ids.size();
                                     final int requestelements = batchSize - elements;
 
                                     if (requestelements != 0)

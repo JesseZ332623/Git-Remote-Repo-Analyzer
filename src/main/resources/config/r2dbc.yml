@@ -1,0 +1,10 @@
+# R2DBC 数据库属性配置
+
+app:
+  r2dbc:
+    host: localhost
+    port: 3306
+    user: Jesse_EC233
+    password: 3191955858_EC
+    # 默认 USE 的数据库
+    default-schema: git_remote_repo_analyzer

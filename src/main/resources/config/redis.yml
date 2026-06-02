@@ -1,0 +1,8 @@
+# Redis 服务属性配置
+
+app:
+  redis:
+    host: localhost
+    port: 6379
+    username: Jesse
+    password: 1234567890

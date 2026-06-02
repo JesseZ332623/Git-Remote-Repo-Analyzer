@@ -1,0 +1,18 @@
+# Git 命令执行器属性配置
+
+# -- 全环境通用的默认值
+app:
+  git-command-runner:
+    # 进程最大等待时间（单位：秒）
+    process-max-wait-time: 1000
+    # 异步读取的缓冲区大小（单位：字节）
+    async-buffer-size: 8192
+    retry:
+      # 最大重试次数
+      max-attempts: 3
+      # 指数退避开始时间间隔
+      min-backoff: 1s
+      # 指数退避最大时间间隔
+      max-backoff: 3s
+      # 指数退避随机抖动因子
+      jitter-factor: 0.5

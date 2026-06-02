@@ -1,0 +1,22 @@
+# 本地待分析仓库路径列表配置（后续会考虑缓存到 Redis，外部可以随时删改）
+
+app:
+  local-repository-path:
+    repos:
+      - path: D:\ai-by-training
+        remote: origin
+
+      - path: E:\cJSON
+        remote: origin
+
+      - path: D:\markitdown
+        remote: origin
+
+      - path: E:\redis
+        remote: origin
+
+      - path: E:\jdk
+        remote: origin
+
+      - path: E:\kafka
+        remote: origin

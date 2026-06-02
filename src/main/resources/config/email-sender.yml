@@ -1,0 +1,21 @@
+# 自己的响应式邮件发送器属性配置
+
+app:
+  # 是否启用本邮件发送器依赖？（默认启用）
+  reactive-email-sender:
+    enabled: true
+    smtp-host: smtp.qq.com # 提供 SMTP 服务的运营商主机名
+    smtp-port: 465         # SMTP 端口号
+    backoff:
+      max-attempt-times: 5
+      start-backoff-interval: 2 # 指数退避起始时间间隔（单位：秒，默认为 1）
+      max-backoff-interval: 5   # 指数退避封顶时间间隔（单位：秒，默认为 10）
+    max-attachment-size: 8
+    sender-email: 3191955858@qq.com # 发件人邮箱地址
+    session-props:
+      mail:
+        smtp:
+          ssl:
+            enable: true
+          auth: true
+          connectiontimeout: 5000

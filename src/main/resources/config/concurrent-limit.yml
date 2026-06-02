@@ -1,0 +1,16 @@
+# 服务 flatMap() 操作并发限制属性配置
+
+app:
+  # 分析记录邮件发送限流配置
+  email-send-concurrent:
+    # 最多同时处理的收件人数量
+    max-recipients: 2
+    # 发送邮件前需要延迟的时间
+    each-send-delay: 100ms
+
+  # 分析记录持久化操作的限流背压配置
+  database-concurrent:
+    # 限制仓库并发数
+    max-repos: 2
+    # 限制文件变更并发数
+    max-file-changes: 100

@@ -1,3 +1,35 @@
+# 服务主配置类
+
+server:
+  address: 0.0.0.0
+  port: 23446
+  shutdown: graceful
+
+  ssl:
+    enabled: true
+    key-store: classpath:sslkey.p12
+    key-store-password: 1234567890
+    keyStoreType: PKCS12
+    keyAlias: sshkeys
+
 spring:
   profiles:
-    active: @activatedProperties@  # 使用 Maven 变量
+    active: ${SPRING_PROFILES_ACTIVE:dev}   # 默认 dev，生产环境变量覆盖
+  application:
+    name: Git-Remote-Repo-analyzer
+  main:
+    web-application-type: reactive
+    banner-mode: console
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  config:
+    import:
+      - classpath:config/log-back.yml
+      - classpath:config/r2dbc.yml
+      - classpath:config/redis.yml
+      - classpath:config/thymeleaf.yml
+      - classpath:config/git-command-runner.yml
+      - classpath:config/global-id-consumer.yml
+      - classpath:config/local-repository-path.yml
+      - classpath:config/email-sender.yml
+      - classpath:config/concurrent-limit.yml

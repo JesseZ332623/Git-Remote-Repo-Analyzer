@@ -144,8 +144,12 @@ public class RemoteRepositoryAnalyzerServiceImpl
                         )
                         .collectList()
                         .flatMap((analyzeResults) ->
-                            this.analyzeResultPersister.save(analyzeId, analyzeDateTime, analyzeResults)
-                                .thenReturn(new AnalyzeResult(analyzeDateTime, analyzeResults))
+                            Mono.zip(
+                                RemoteSnapshotUtils.toFile(analyzeResults),
+                                this.analyzeResultPersister
+                                    .save(analyzeId, analyzeDateTime, analyzeResults)
+                            )
+                            .thenReturn(new AnalyzeResult(analyzeDateTime, analyzeResults))
                         )
                 );
         });

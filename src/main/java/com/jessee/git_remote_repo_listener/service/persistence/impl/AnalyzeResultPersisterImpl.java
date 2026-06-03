@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
+import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -114,10 +115,31 @@ public class AnalyzeResultPersisterImpl implements AnalyzeResultPersister
         return
         Flux.fromIterable(
              bindBrachFileChangesMap(branchIds, branchFileChanges)
-                .entrySet())
+                 .entrySet())
             .flatMap((entry) -> {
                 final Long branchId                = entry.getKey();
                 final List<FileChange> fileChanges = entry.getValue();
+
+                /*
+                 * 如果遇到了没有任何变化的分支，比如：
+                 * {
+                 *     "branchName" : "origin/fix/sys_operator_log",
+                 *     "branchRefChange" : {
+                 *          "prevLatestCommitHash" : "4667ffed...",
+                 *          "latestCommitHash" : "4667ffed...",
+                 *          "status" : "IMMUTABLE"
+                 *      },
+                 *      "fileChanges" : [ ] <<-- 注意这里
+                 *  }
+                 *
+                 * 则直接返回，后续的持久化操作不要执行，
+                 * 避免 ID 消费机出现这样的警告。
+                 *
+                 * WARN  c.j.g.c.impl.GlobalIdConsumerImpl - Batch size must be positive!
+                 */
+                if (CollectionUtils.isEmpty(fileChanges)) {
+                    return Mono.empty();
+                }
 
                 return
                 this.branchFileChangeService.saveBranchFileChanges(

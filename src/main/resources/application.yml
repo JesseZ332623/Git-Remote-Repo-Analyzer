@@ -1,4 +1,4 @@
-# 服务主配置类
+# 服务主配置文件
 
 server:
   address: 0.0.0.0
@@ -30,6 +30,6 @@ spring:
       - classpath:config/thymeleaf.yml
       - classpath:config/git-command-runner.yml
       - classpath:config/global-id-consumer.yml
-      - classpath:config/local-repository-path.yml
       - classpath:config/email-sender.yml
       - classpath:config/concurrent-limit.yml
+      - classpath:config/redis-distribute-lock.yml

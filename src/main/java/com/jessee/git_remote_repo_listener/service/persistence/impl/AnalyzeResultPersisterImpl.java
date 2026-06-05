@@ -176,7 +176,7 @@ public class AnalyzeResultPersisterImpl implements AnalyzeResultPersister
         Flux.fromIterable(analyzeResults)
             .flatMap((branchFileChanges) ->
                 this.repositoryService
-                    .saveRepository(analyzeId, branchFileChanges.getRepoConfig())
+                    .saveRepository(analyzeId, branchFileChanges.getRemoteRepository())
                     .flatMap((repositoryId) ->
                         this.branchService
                             .saveBranchs(analyzeId, repositoryId, extractBranchNameList(branchFileChanges))
@@ -198,7 +198,7 @@ public class AnalyzeResultPersisterImpl implements AnalyzeResultPersister
                     .as(this.transactionalOperator::transactional)
                     .onErrorResume((exception) -> {
                         log.error(
-                            branchFileChanges.getRepoConfig().getDirectoryName(),
+                            branchFileChanges.getRemoteRepository().getDirectoryName(),
                             "Save analyze result data by repository {} failed, skip.",
                             exception
                         );

@@ -30,8 +30,8 @@ public class RemoteRepositoryAnalyzeSchedulerTasks
         log.error("Execute remote repository analysis scheduled task failed...", error);
 
     /** 手动 subscribe() 后处理 onComplete() 信号的回调函数。*/
-    private static final Runnable
-    COMPLETE_CONSUMER = () ->
+    private static final Consumer<? super Void>
+    SUCCESS_CONSUMER = (ignore) ->
         log.info("Execute remote repository analysis scheduled task success!");
 
     /**
@@ -133,6 +133,9 @@ public class RemoteRepositoryAnalyzeSchedulerTasks
                 .then();
         })
         .as(this.redissonLocker.lockAround(true))
-        .subscribe(null, ERROR_CONSMER, COMPLETE_CONSUMER, SUBSCRIPTION_CONSUER);
+        .doOnSubscribe(SUBSCRIPTION_CONSUER)
+        .doOnSuccess(SUCCESS_CONSUMER)
+        .doOnError(ERROR_CONSMER)
+        .subscribe();
     }
 }

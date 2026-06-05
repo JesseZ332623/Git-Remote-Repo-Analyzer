@@ -1,6 +1,7 @@
 package com.jessee.git_remote_repo_listener.scheduler_tasks;
 
 import com.jessee.git_remote_repo_listener.cache.EmailRecipientCacher;
+import com.jessee.git_remote_repo_listener.component.RedissonLocker;
 import com.jessee.git_remote_repo_listener.pojo.AnalyzeResult;
 import com.jessee.git_remote_repo_listener.properties.EmailSendConcurrentProperties;
 import com.jessee.git_remote_repo_listener.service.AnalyzeReportEmailSender;
@@ -8,7 +9,6 @@ import com.jessee.git_remote_repo_listener.service.RemoteRepositoryAnalyzerServi
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Subscription;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -16,7 +16,6 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /** 远程仓库分析定时任务服务类。*/
@@ -52,12 +51,11 @@ public class RemoteRepositoryAnalyzeSchedulerTasks
     /** 分析报告邮件发送器接口。*/
     private final AnalyzeReportEmailSender analyzeReportEmailSender;
 
+    /** Redisson 分布式锁封装工具组件接口。*/
+    private final RedissonLocker redissonLocker;
+
     /** 分析记录邮件发送限流配置。*/
     private final EmailSendConcurrentProperties properties;
-
-    /** 表示异步任务是否在执行的标志位。*/
-    @Qualifier(value = "AnalyzeRunningFlag")
-    private final AtomicBoolean runningFlag;
 
     /**
      * 向缓存中的每个收件人发送所有仓库的变更报告，
@@ -108,17 +106,6 @@ public class RemoteRepositoryAnalyzeSchedulerTasks
     )
     public void remoteRepoAnalysisTask()
     {
-        // 如果检查到本任务正在手动执行，直接跳过即可。
-        if (!this.runningFlag.compareAndSet(false, true))
-        {
-            log.warn(
-                "The remote warehouse analysis task is currently being executed, " +
-                "skipping this scheduled task."
-            );
-
-            return;
-        }
-
         Mono.zip(
             this.cacher.getAllRecipientAddress(),
             this.remoteRepositoryAnalyzerService.doAnalysis()
@@ -145,7 +132,7 @@ public class RemoteRepositoryAnalyzeSchedulerTasks
                 )
                 .then();
         })
-        .doFinally((ignore) -> this.runningFlag.set(false))
+        .as(this.redissonLocker.lockAround(true))
         .subscribe(null, ERROR_CONSMER, COMPLETE_CONSUMER, SUBSCRIPTION_CONSUER);
     }
 }

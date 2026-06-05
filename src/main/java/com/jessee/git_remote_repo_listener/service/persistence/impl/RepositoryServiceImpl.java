@@ -3,7 +3,7 @@ package com.jessee.git_remote_repo_listener.service.persistence.impl;
 import com.jessee.git_remote_repo_listener.component.GlobalIdConsumer;
 import com.jessee.git_remote_repo_listener.entity.RepositoryEntity;
 import com.jessee.git_remote_repo_listener.mapper.RepositoryMapper;
-import com.jessee.git_remote_repo_listener.properties.RepoPathProperties;
+import com.jessee.git_remote_repo_listener.pojo.RemoteRepository;
 import com.jessee.git_remote_repo_listener.service.persistence.RepositoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,17 +24,9 @@ public class RepositoryServiceImpl implements RepositoryService
     /** 全局 ID 消费机接口。*/
     private final GlobalIdConsumer globalIdConsumer;
 
-    /**
-     * 往 repository 表写入仓库数据，返回该条记录的 ID。
-     *
-     * @param analyzeId  分析记录 ID
-     * @param repoConfig 仓库配置数据
-     *
-     * @return 本次分析下该仓库记录的 ID
-     */
     @Override
     public Mono<Long>
-    saveRepository(Long analyzeId, RepoPathProperties.RepoConfig repoConfig)
+    saveRepository(Long analyzeId, RemoteRepository remoteRepository)
     {
         return
         this.globalIdConsumer.nextId()
@@ -48,8 +40,8 @@ public class RepositoryServiceImpl implements RepositoryService
                 return
                 this.repositoryMapper.save(
                     repository.setAnalyzeId(analyzeId)
-                        .setLocalPath(repoConfig.getPath())
-                        .setRemoteName(repoConfig.getRemote())
+                        .setLocalPath(remoteRepository.getPath())
+                        .setRemoteName(remoteRepository.getRemote())
                 );
             })
             .map((repository) ->

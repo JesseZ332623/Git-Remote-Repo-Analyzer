@@ -2,6 +2,10 @@ package com.jessee.git_remote_repo_listener.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.SchedulingConfigurer;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
@@ -11,7 +15,8 @@ import java.util.concurrent.ThreadFactory;
 
 /** 分析作业专用调度器配置类。*/
 @Configuration
-public class SchedulerConfig
+@EnableScheduling
+public class SchedulerConfig implements SchedulingConfigurer
 {
     @Bean(name = "GitWorkerScheduler")
     public Scheduler gitWorkerScheduler()
@@ -36,5 +41,24 @@ public class SchedulerConfig
                     .factory();
 
         return Executors.newThreadPerTaskExecutor(factory);
+    }
+
+    @Override
+    public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
+        taskRegistrar.setTaskScheduler(taskScheduler());
+    }
+
+    @Bean
+    public ThreadPoolTaskScheduler taskScheduler()
+    {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+
+        scheduler.setPoolSize(8);                          // 可根据实际定时任务数量调整
+        scheduler.setThreadNamePrefix("scheduled-");
+        scheduler.setAwaitTerminationSeconds(60);
+        scheduler.setWaitForTasksToCompleteOnShutdown(true);
+        scheduler.setRemoveOnCancelPolicy(true);
+
+        return scheduler;
     }
 }

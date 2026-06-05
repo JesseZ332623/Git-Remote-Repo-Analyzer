@@ -83,8 +83,6 @@ public class RemoteRepositoryAnalyzerImpl implements RemoteRepositoryAnalyzer
                 "safe.directory", repoPath
         );
 
-        System.out.printf("%s - %s", localRepoPath, repoPath);
-
         return
         this.gitCommandRunner.run(arguments)
             .doOnSuccess((ignore) ->

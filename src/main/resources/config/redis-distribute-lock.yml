@@ -1,0 +1,9 @@
+# Redis 分布式锁配置属性
+app:
+  redis-distribute-lock:
+    # 分布式锁换成键前缀
+    key-prefix: "git-remote-repo-analyzer:lock:analyzing"
+    # 等待获取分布式锁超时时间
+    lock-wait-timeout: 100ms
+    # 分布式锁有效期时间（这里使用看门狗策略）
+    lock-lease-time: 30s

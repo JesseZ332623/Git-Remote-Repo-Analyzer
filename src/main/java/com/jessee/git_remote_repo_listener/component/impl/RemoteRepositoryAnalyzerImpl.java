@@ -70,6 +70,27 @@ public class RemoteRepositoryAnalyzerImpl implements RemoteRepositoryAnalyzer
     }
 
     @Override
+    public Mono<Void>
+    gitConfigDeleteSafeDirectory(String localRepoPath)
+    {
+        final String repoPath
+            = normalizePath(localRepoPath).replace("\\", "\\\\");
+
+        final List<String> arguments
+            = List.of(
+                "git", "config",
+                "--global", "--unset",
+                "safe.directory", repoPath
+        );
+
+        return
+        this.gitCommandRunner.run(arguments)
+            .doOnSuccess((ignore) ->
+                log.info("Delete path: {} to safe.directory config.", repoPath))
+            .then();
+    }
+
+    @Override
     public Mono<Void> gitFetch(String localRepoPath)
     {
         final String repoPath

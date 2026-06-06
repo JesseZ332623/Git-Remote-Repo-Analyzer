@@ -7,8 +7,6 @@ import lombok.experimental.Accessors;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
-import java.time.LocalDateTime;
-
 /** branch_file_change 表实体类，记录仓库下提交文件发状态。*/
 @Data
 @Accessors(chain = true)

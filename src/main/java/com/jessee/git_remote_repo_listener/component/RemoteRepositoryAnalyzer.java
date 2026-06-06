@@ -37,6 +37,17 @@ public interface RemoteRepositoryAnalyzer
     Mono<Void> gitConfigAddSafeDirectory(String localRepoPath);
 
     /**
+     * 调用：
+     *
+     * <pre>
+     *     git config --global --unset safe.directory (localRepoPath)
+     * </pre>
+     *
+     * 命令，关闭指定仓库的操作权限。
+     */
+    Mono<Void> gitConfigDeleteSafeDirectory(String localRepoPath);
+
+    /**
      * 静默调用 git fetch 先从远程仓库拉去最新的变更信息，
      * 再删除远程已经删除的分支引用。
      *

@@ -1,12 +1,9 @@
 package com.jessee.git_remote_repo_listener.service.impl;
 
 import com.jessee.git_remote_repo_listener.cache.RemoteRepositoryAnalyzerCacher;
+import com.jessee.git_remote_repo_listener.cache.RemoteRepositoryCacher;
 import com.jessee.git_remote_repo_listener.component.RemoteRepositoryAnalyzer;
-import com.jessee.git_remote_repo_listener.pojo.AnalyzeResult;
-import com.jessee.git_remote_repo_listener.pojo.BranchFileChange;
-import com.jessee.git_remote_repo_listener.pojo.BranchFileChanges;
-import com.jessee.git_remote_repo_listener.pojo.BranchRefChange;
-import com.jessee.git_remote_repo_listener.properties.RepoPathProperties;
+import com.jessee.git_remote_repo_listener.pojo.*;
 import com.jessee.git_remote_repo_listener.service.persistence.AnalyzeResultPersister;
 import com.jessee.git_remote_repo_listener.service.RemoteRepositoryAnalyzerService;
 import com.jessee.git_remote_repo_listener.utils.RemoteSnapshotUtils;
@@ -28,8 +25,9 @@ import java.util.Map;
 public class RemoteRepositoryAnalyzerServiceImpl
     implements RemoteRepositoryAnalyzerService
 {
-    /** 本地待分析仓库路径配置。*/
-    private final RepoPathProperties repoPathProperties;
+    /** 待分析仓库缓存操作接口。*/
+    private final
+    RemoteRepositoryCacher remoteRepositoryCacher;
 
     /** Git 远程仓库分析器接口。*/
     private final RemoteRepositoryAnalyzer remoteRepositoryAnalyzer;
@@ -42,16 +40,16 @@ public class RemoteRepositoryAnalyzerServiceImpl
 
     /** 查询本地仓库每个分支的最新提交哈希，并将该结果缓存至 Redis。*/
     private Mono<Void>
-    queryForEachRef(RepoPathProperties.RepoConfig repo)
+    queryForEachRef(RemoteRepository remoteRepository)
     {
-        final String localRepoPath = repo.getPath();
-        final String repoRemote    = repo.getRemote();
+        final String localRepoPath = remoteRepository.getPath();
+        final String repoRemote    = remoteRepository.getRemote();
 
         return
         this.remoteRepositoryAnalyzer
             .gitForeachRef(localRepoPath, repoRemote)
             .flatMap((forEachRefs) ->
-                this.cacher.cacheForEachRefsMap(repo, forEachRefs))
+                this.cacher.cacheForEachRefsMap(remoteRepository, forEachRefs))
             .then();
     }
 
@@ -62,14 +60,14 @@ public class RemoteRepositoryAnalyzerServiceImpl
 
     /** 查询当前本地仓库每个分支的最新提交哈希并与上一个快照进行比对。*/
     private Mono<Map<String, BranchRefChange>>
-    compareForEachRef(RepoPathProperties.RepoConfig repo)
+    compareForEachRef(RemoteRepository remoteRepository)
     {
-        final String localRepoPath = repo.getPath();
-        final String repoRemote    = repo.getRemote();
+        final String localRepoPath = remoteRepository.getPath();
+        final String repoRemote    = remoteRepository.getRemote();
 
         return
         Mono.zip(
-                this.cacher.getForEachRefsMap(repo),
+                this.cacher.getForEachRefsMap(remoteRepository),
                 this.remoteRepositoryAnalyzer
                     .gitForeachRef(localRepoPath, repoRemote)
             )
@@ -80,21 +78,21 @@ public class RemoteRepositoryAnalyzerServiceImpl
     /** 查询并解析有更新的远程分支的详细文件变更状态。*/
     private Mono<List<BranchFileChange>>
     makeBranchFileChangeList(
-        final RepoPathProperties.RepoConfig repoConfig,
+        final RemoteRepository remoteRepository,
         final Map<String, BranchRefChange> refChangeMap
     )
     {
         // 如果上游的 refChangeMap 为空，
         // 则意味着分支状态完全同步，从缓存返回结果即可。
         if (refChangeMap.isEmpty()) {
-            return this.cacher.getBranchFileChanges(repoConfig);
+            return this.cacher.getBranchFileChanges(remoteRepository);
         }
 
         return
         Flux.fromIterable(refChangeMap.entrySet())
             .flatMap((refChangeEntry) ->
                 this.remoteRepositoryAnalyzer
-                    .gitDiff(repoConfig.getPath(), refChangeEntry.getValue())
+                    .gitDiff(remoteRepository.getPath(), refChangeEntry.getValue())
                     .map((fileChanges) ->
                         BranchFileChange.of(
                             refChangeEntry.getKey(),
@@ -106,7 +104,7 @@ public class RemoteRepositoryAnalyzerServiceImpl
             .collectList()
             .flatMap((branchFileChanges) ->
                 this.cacher
-                    .cacheBranchFileChanges(repoConfig, branchFileChanges)
+                    .cacheBranchFileChanges(remoteRepository, branchFileChanges)
                     .thenReturn(branchFileChanges)
             );
     }
@@ -122,7 +120,7 @@ public class RemoteRepositoryAnalyzerServiceImpl
             return
             this.analyzeResultPersister.saveAnalyzeRecord(analyzeDateTime)
                 .flatMap((analyzeId) ->
-                    Flux.fromIterable(this.repoPathProperties.getRepos())
+                    this.remoteRepositoryCacher.getAll()
                         .flatMap((repo) ->
                             this.queryForEachRef(repo)
                                 .then(this.fetchRemote(repo.getPath()))

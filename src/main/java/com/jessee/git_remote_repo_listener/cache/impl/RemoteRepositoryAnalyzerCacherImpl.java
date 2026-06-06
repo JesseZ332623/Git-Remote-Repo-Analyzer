@@ -2,7 +2,7 @@ package com.jessee.git_remote_repo_listener.cache.impl;
 
 import com.jessee.git_remote_repo_listener.cache.RemoteRepositoryAnalyzerCacher;
 import com.jessee.git_remote_repo_listener.pojo.BranchFileChange;
-import com.jessee.git_remote_repo_listener.properties.RepoPathProperties;
+import com.jessee.git_remote_repo_listener.pojo.RemoteRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.Contract;
@@ -30,30 +30,30 @@ public class RemoteRepositoryAnalyzerCacherImpl implements RemoteRepositoryAnaly
     /** 拼接远程分支变化表缓存键。*/
     @Contract(pure = true)
     private static String
-    forEachRefCacheKey(RepoPathProperties.RepoConfig repoConfig)
+    forEachRefCacheKey(RemoteRepository remoteRepository)
     {
         return "git-remote-repo-analyzer:for-each-ref:"
-                + repoConfig.getDirectoryName() 
+                + remoteRepository.getDirectoryName()
                 + ":" 
-                + repoConfig.getRemote();
+                + remoteRepository.getRemote();
     }
 
     /** 更新的远程分支的详细文件变更状态缓存键。*/
     @Contract(pure = true)
     private static String
-    diffResultCacheKey(RepoPathProperties.RepoConfig repoConfig)
+    diffResultCacheKey(RemoteRepository remoteRepository)
     {
         return "git-remote-repo-analyzer:diff-result:" 
-                + repoConfig.getDirectoryName()
+                + remoteRepository.getDirectoryName()
                 + ":"
-                + repoConfig.getRemote();
+                + remoteRepository.getRemote();
     }
 
     @Override
     public Mono<Void>
-    cacheForEachRefsMap(RepoPathProperties.RepoConfig repo, Map<String, String> forEachRefs)
+    cacheForEachRefsMap(RemoteRepository remoteRepository, Map<String, String> forEachRefs)
     {
-        final String forEachRefKey = forEachRefCacheKey(repo);
+        final String forEachRefKey = forEachRefCacheKey(remoteRepository);
 
         return
         this.redisTemplate.opsForHash()
@@ -64,9 +64,9 @@ public class RemoteRepositoryAnalyzerCacherImpl implements RemoteRepositoryAnaly
 
     @Override
     public Mono<Void>
-    cacheBranchFileChanges(RepoPathProperties.RepoConfig repo, List<BranchFileChange> branchFileChanges)
+    cacheBranchFileChanges(RemoteRepository remoteRepository, List<BranchFileChange> branchFileChanges)
     {
-        final String diffResultCacheKey = diffResultCacheKey(repo);
+        final String diffResultCacheKey = diffResultCacheKey(remoteRepository);
 
         return
         this.branchFileChangeRedisTemplate.opsForList()
@@ -78,9 +78,9 @@ public class RemoteRepositoryAnalyzerCacherImpl implements RemoteRepositoryAnaly
     /** 获取缓存的每个远程分支的当前最新提交哈希表。*/
     @Override
     public Mono<Map<String, String>>
-    getForEachRefsMap(RepoPathProperties.RepoConfig repo)
+    getForEachRefsMap(RemoteRepository remoteRepository)
     {
-        final String forEachRefKey = forEachRefCacheKey(repo);
+        final String forEachRefKey = forEachRefCacheKey(remoteRepository);
 
         return
         this.redisTemplate.opsForHash()
@@ -94,9 +94,9 @@ public class RemoteRepositoryAnalyzerCacherImpl implements RemoteRepositoryAnaly
     /** 获取缓存的每个远程分支的提交文件变更信息。*/
     @Override
     public Mono<List<BranchFileChange>>
-    getBranchFileChanges(RepoPathProperties.RepoConfig repo)
+    getBranchFileChanges(RemoteRepository remoteRepository)
     {
-        final String diffResultCacheKey = diffResultCacheKey(repo);
+        final String diffResultCacheKey = diffResultCacheKey(remoteRepository);
 
         return
         this.branchFileChangeRedisTemplate

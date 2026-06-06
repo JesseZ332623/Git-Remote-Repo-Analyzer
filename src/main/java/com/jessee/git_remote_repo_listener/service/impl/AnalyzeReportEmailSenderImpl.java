@@ -74,9 +74,9 @@ public class AnalyzeReportEmailSenderImpl implements AnalyzeReportEmailSender
     generateAnalysisReport(LocalDateTime analyzDateTime, BranchFileChanges branchFileChanges)
     {
         final String repositoryName
-            = branchFileChanges.getRepoConfig().getPath()
+            = branchFileChanges.getRemoteRepository().getPath()
             + " "
-            + branchFileChanges.getRepoConfig().getRemote();
+            + branchFileChanges.getRemoteRepository().getRemote();
 
         final List<BranchFileChange> changes
             = branchFileChanges.getBranchFileChanges();
@@ -126,7 +126,7 @@ public class AnalyzeReportEmailSenderImpl implements AnalyzeReportEmailSender
         this.generateAnalysisReport(analyzDateTime, branchFileChanges)
             .flatMap((htmlMainText) ->
                 this.sendAnalysisReportMail(
-                    branchFileChanges.getRepoConfig().getDirectoryName(),
+                    branchFileChanges.getRemoteRepository().getDirectoryName(),
                     recipient,
                     htmlMainText
                 )

@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import reactor.core.publisher.Mono;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 
 /** 自定义响应体。*/
 @Getter
@@ -15,8 +16,6 @@ public class CustomizedResponse<T>
 {
     private final long timestamp = System.currentTimeMillis();
 
-    private final HttpStatus status;
-
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private final String message;
 
@@ -24,9 +23,16 @@ public class CustomizedResponse<T>
     private final T data;
 
     public static <T> Mono<CustomizedResponse<T>>
-    responseOf(HttpStatus status, String message, T data)
+    responseOf(
+        final ServerHttpResponse response,
+        final HttpStatus         status,
+        final String             message,
+        final T                  data
+    )
     {
-        return
-        Mono.just(new CustomizedResponse<>(status, message, data));
+        return Mono.fromCallable(() -> {
+            response.setStatusCode(status);
+            return new CustomizedResponse<>(message, data);
+        });
     }
 }

@@ -18,7 +18,7 @@
 
 - [远程仓库分析结果缓存器](https://github.com/JesseZ332623/Git-Remote-Repo-Analyzer/blob/develop/src/main/java/com/jessee/git_remote_repo_listener/cache/impl/RemoteRepositoryAnalyzerCacherImpl.java)
 
-- [远程仓库分析结果持久化器](https://github.com/JesseZ332623/Git-Remote-Repo-Analyzer/blob/develop/src/main/java/com/jessee/git_remote_repo_listener/service/impl/AnalyzeResultPersisterImpl.java)
+- [远程仓库分析结果持久化器](https://github.com/JesseZ332623/Git-Remote-Repo-Analyzer/blob/develop/src/main/java/com/jessee/git_remote_repo_listener/service/persistence/impl/AnalyzeResultPersisterImpl.java)
 
 - [远程仓库分析结果邮件发送器](https://github.com/JesseZ332623/Git-Remote-Repo-Analyzer/blob/develop/src/main/java/com/jessee/git_remote_repo_listener/service/impl/AnalyzeReportEmailSenderImpl.java)
 

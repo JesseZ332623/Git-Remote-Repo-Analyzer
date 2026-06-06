@@ -10,7 +10,7 @@
 
 ### 管道描述
 
-- [Redisson 分布式锁封装工具组件](https://github.com/JesseZ332623/Git-Remote-Repo-Analyzer/blob/develop/src/main/java/com/jessee/git_remote_repo_listener/component/impl/RedissonLocker.java)
+- [Redisson 分布式锁封装工具组件](https://github.com/JesseZ332623/Git-Remote-Repo-Analyzer/blob/develop/src/main/java/com/jessee/git_remote_repo_listener/component/impl/RedissonLockerImpl.java)
 
 - [响应式 Git 命令执行器](https://github.com/JesseZ332623/Git-Remote-Repo-Analyzer/blob/develop/src/main/java/com/jessee/git_remote_repo_listener/component/impl/GitCommandRunnerImpl.java)
 

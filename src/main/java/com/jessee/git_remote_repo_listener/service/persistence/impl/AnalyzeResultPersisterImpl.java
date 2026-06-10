@@ -194,7 +194,6 @@ public class AnalyzeResultPersisterImpl implements AnalyzeResultPersister
                             )
                     )
                     .then(this.analyzeRecordService.setAnalyzComplete(analyzeId))
-                    .subscribeOn(Schedulers.boundedElastic())
                     .as(this.transactionalOperator::transactional)
                     .onErrorResume((exception) -> {
                         log.error(

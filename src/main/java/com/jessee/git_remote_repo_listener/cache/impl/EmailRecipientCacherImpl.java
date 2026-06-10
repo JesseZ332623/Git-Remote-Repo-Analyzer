@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 import java.util.Map;
@@ -33,7 +32,6 @@ public class EmailRecipientCacherImpl implements EmailRecipientCacher
         return
         this.redisTemplate.opsForHash()
             .put(RECIPIENT_CACHE_KEY, name, address)
-            .subscribeOn(Schedulers.boundedElastic())
             .then();
     }
 
@@ -53,8 +51,7 @@ public class EmailRecipientCacherImpl implements EmailRecipientCacher
                     )
                 )
             )
-            .cast(String.class)
-            .subscribeOn(Schedulers.boundedElastic());
+            .cast(String.class);
     }
 
     @Override
@@ -64,19 +61,19 @@ public class EmailRecipientCacherImpl implements EmailRecipientCacher
         this.redisTemplate.opsForHash()
             .entries(RECIPIENT_CACHE_KEY)
             .switchIfEmpty(
-                Mono.fromCallable(() -> {
+                Mono.defer(() -> {
                     log.warn(
                         "No recipient address in key: {}, use defalt value.",
                         RECIPIENT_CACHE_KEY
                     );
 
                     // 缓存如果没有任何收件人，就先发到我这里，避免丢件
-                    return Map.entry("Jesse", "zhj3191955858@gmail.com");
+                    return
+                    Mono.just(Map.entry("Jesse", "zhj3191955858@gmail.com"));
                 })
             )
             .map(Map.Entry::getValue)
             .cast(String.class)
-            .collectList()
-            .subscribeOn(Schedulers.boundedElastic());
+            .collectList();
     }
 }

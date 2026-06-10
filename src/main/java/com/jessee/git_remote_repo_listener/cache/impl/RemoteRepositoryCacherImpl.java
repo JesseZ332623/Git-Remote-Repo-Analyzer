@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.util.HashSet;
 import java.util.List;
@@ -51,7 +50,7 @@ public class RemoteRepositoryCacherImpl implements RemoteRepositoryCacher
         Flux.fromIterable(remoteRepositories)
             .flatMap(RemoteRepository::checkPath)
             .then(
-                Mono.fromCallable(() ->
+                Mono.just(
                     remoteRepositories.stream()
                         .collect(
                             Collectors.toUnmodifiableMap(
@@ -83,8 +82,7 @@ public class RemoteRepositoryCacherImpl implements RemoteRepositoryCacher
         return
         this.redisTemplate.opsForHash()
             .entries(REMOTE_REPO_CACHE_KEY)
-            .map(RemoteRepository::fromCache)
-            .subscribeOn(Schedulers.boundedElastic());
+            .map(RemoteRepository::fromCache);
     }
 
     /**
@@ -114,7 +112,6 @@ public class RemoteRepositoryCacherImpl implements RemoteRepositoryCacher
                             )
                         )
                     )
-                    .subscribeOn(Schedulers.boundedElastic())
                     .then(this.remoteRepositoryAnalyzer.gitConfigAddSafeDirectory(path))
             )
             .as(this.redissonLocker.lockAround(false));
@@ -158,7 +155,6 @@ public class RemoteRepositoryCacherImpl implements RemoteRepositoryCacher
             return
             this.redisTemplate.opsForHash()
                 .putAll(REMOTE_REPO_CACHE_KEY, tobeAddedRepos)
-                .subscribeOn(Schedulers.boundedElastic())
                 .then(
                     Flux.fromIterable(tobeAddedRepos.keySet())
                         .flatMap(this.remoteRepositoryAnalyzer::gitConfigAddSafeDirectory)
@@ -178,7 +174,6 @@ public class RemoteRepositoryCacherImpl implements RemoteRepositoryCacher
         return
         this.redisTemplate.opsForHash()
             .hasKey(REMOTE_REPO_CACHE_KEY, repositoryPath)
-            .subscribeOn(Schedulers.boundedElastic())
             .filter(Boolean::booleanValue)
             .switchIfEmpty(
                 Mono.error(
@@ -190,7 +185,6 @@ public class RemoteRepositoryCacherImpl implements RemoteRepositoryCacher
             .flatMap((ignore) ->
                 this.redisTemplate.opsForHash()
                     .remove(REMOTE_REPO_CACHE_KEY, repositoryPath)
-                    .subscribeOn(Schedulers.boundedElastic())
                     .then(
                         this.remoteRepositoryAnalyzer
                             .gitConfigDeleteSafeDirectory(repositoryPath)

@@ -58,7 +58,6 @@ public class RemoteRepositoryAnalyzerCacherImpl implements RemoteRepositoryAnaly
         return
         this.redisTemplate.opsForHash()
             .putAll(forEachRefKey, forEachRefs)
-            .subscribeOn(Schedulers.boundedElastic())
             .then();
     }
 
@@ -71,7 +70,6 @@ public class RemoteRepositoryAnalyzerCacherImpl implements RemoteRepositoryAnaly
         return
         this.branchFileChangeRedisTemplate.opsForList()
             .rightPushAll(diffResultCacheKey, branchFileChanges.toArray(BranchFileChange[]::new))
-            .subscribeOn(Schedulers.boundedElastic())
             .then();
     }
 
@@ -87,8 +85,8 @@ public class RemoteRepositoryAnalyzerCacherImpl implements RemoteRepositoryAnaly
             .entries(forEachRefKey)
             .collectMap(
                 (entry) -> (String) entry.getKey(),
-                (entry) -> (String) entry.getValue())
-            .subscribeOn(Schedulers.boundedElastic());
+                (entry) -> (String) entry.getValue()
+            );
     }
 
     /** 获取缓存的每个远程分支的提交文件变更信息。*/
@@ -103,7 +101,6 @@ public class RemoteRepositoryAnalyzerCacherImpl implements RemoteRepositoryAnaly
             .opsForList()
             .range(diffResultCacheKey, 0, -1)
             .cast(BranchFileChange.class)
-            .collectList()
-            .subscribeOn(Schedulers.boundedElastic());
+            .collectList();
     }
 }

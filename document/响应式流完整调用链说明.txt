@@ -1,0 +1,174 @@
+// ========== 你的业务代码 ==========
+this.branchFileChangeRedisTemplate.opsForList()
+    .rightPushAll(key, values)                    // 组装命令，返回 Mono
+    .then()                                       // 声明：完成后继续
+    // 此时没有任何实际执行，只是构建了响应式链
+
+// ========== 订阅后开始执行 ==========
+subscribe()  // Reactor 触发订阅
+
+    // ========== 1. Spring Data Redis ==========
+    ReactiveRedisTemplate.execute(connection ->
+        connection.listCommands().rPush(key, values)
+    )
+        // 构造 Redis 命令对象：*6\r\n$5\r\nRPUSH\r\n$3\r\nkey\r\n...
+
+        // ========== 2. Lettuce ==========
+        LettuceConnection.rPush(key, values)
+            // 获取 Netty Channel
+            Channel channel = connection.getChannel();
+
+            // 将命令写入 Channel
+            channel.writeAndFlush(command)       // 异步，立即返回 ChannelFuture
+                |
+                // ========== 3. Netty Channel Pipeline ==========
+                AbstractChannel.writeAndFlush(msg)
+                    // 从 Pipeline 的 Tail 开始，触发出站事件
+                    pipeline.writeAndFlush(msg)
+                        |
+                        // ========== 4. ChannelOutboundBuffer ==========
+                        // 命令对象加入发送缓冲区链表
+                        ChannelOutboundBuffer.addMessage(msg, size, promise)
+                            // 设置水位线检查
+                            // 如果超过高水位线，设置 channel 不可写
+                            // 触发 ChannelWritabilityChanged 事件
+
+                        // ========== 5. Netty EventLoop 线程 ==========
+                        // 注册 OP_WRITE 兴趣事件
+                        // 如果是 EpollEventLoop:
+                        Native.epollCtl(epollFd, EPOLL_CTL_MOD, fd, EPOLLIN|EPOLLOUT)
+                            |
+                            // 下次 EventLoop 循环时：
+                            EventLoop.run()
+                                |
+                                // ========== 6. epoll_wait 返回 OP_WRITE 就绪 ==========
+                                Native.epollWait(epollFd, events, timeout)
+                                    // 内核返回就绪的 fd 和事件
+                                    // events[i].events & EPOLLOUT == true
+
+                                // ========== 7. 处理写事件 ==========
+                                AbstractEpollChannel.write()
+                                    // 从 ChannelOutboundBuffer 取出待发送的数据
+                                    ChannelOutboundBuffer.flush()
+                                        // 循环发送，直到缓冲区空或无法写入
+                                        doWrite(in, out)
+                                            |
+                                            // ========== 8. Java NIO SocketChannel ==========
+                                            SocketChannel.write(ByteBuffer)
+                                                // 内部调用 write() 系统调用
+                                                |
+                                                // ========== 9. 系统调用 ==========
+                                                write(fd, buf, len)
+                                                    // 陷入内核态
+                                                    |
+                                                    // ========== 10. 内核网络栈 ==========
+                                                    // 1. 检查 socket 发送缓冲区是否有空间
+                                                    // 2. 将数据从用户态拷贝到内核发送缓冲区
+                                                    // 3. TCP 协议处理：
+                                                    //    - 检查拥塞窗口
+                                                    //    - TCP 分段（MSS）
+                                                    //    - 添加 TCP 头
+                                                    // 4. IP 协议处理：
+                                                    //    - IP 分片（MTU）
+                                                    //    - 添加 IP 头
+                                                    //    - 路由查找
+                                                    // 5. 数据链路层：
+                                                    //    - 添加 MAC 头
+                                                    //    - 放入网卡发送队列
+                                                    // 6. 网卡 DMA：
+                                                    //    - 将数据从内存拷贝到网卡
+                                                    //    - 网卡发送数据到网络
+
+// ========================== Redis 服务器 ==========================
+// Redis 收到数据
+// 解析 RESP 协议：*6\r\n$5\r\nRPUSH\r\n...
+// 执行 RPUSH 命令
+// 构造响应：:1\r\n（整数回复）
+
+// Redis 发送响应
+// 网卡发送数据回到服务器
+
+// ========== 11. 数据到达本机 ==========
+网卡收到数据
+    // 触发硬件中断
+    // 内核将数据从网卡拷贝到内存（DMA）
+    // 放入 socket 接收缓冲区
+    // 检查 socket fd 的 epoll 兴趣列表
+
+    // ========== 12. epoll 检测到 EPOLLIN ==========
+    // 将 fd 加入 epoll 就绪链表
+    // 唤醒阻塞在 epoll_wait 的 EventLoop 线程
+
+    // ========== 13. Netty EventLoop 被唤醒 ==========
+    Native.epollWait(epollFd, events, timeout)  // 返回
+        // events[i].events & EPOLLIN == true
+        // events[i].data.fd == redis socket fd
+
+        // ========== 14. 处理读事件 ==========
+        AbstractEpollChannel.read()
+            // 分配 ByteBuffer（从内存池）
+            ByteBufAllocator allocator = channel.alloc();
+            ByteBuf byteBuf = allocator.directBuffer();
+
+            // 读取数据
+            doReadBytes(byteBuf)
+                |
+                // ========== 15. Java NIO SocketChannel ==========
+                SocketChannel.read(ByteBuffer)
+                    // 内部调用 read() 系统调用
+                    |
+                    // ========== 16. 系统调用 ==========
+                    read(fd, buf, len)
+                        // 陷入内核态
+                        // 从 socket 接收缓冲区拷贝数据到用户态
+                        // 返回实际读取的字节数
+
+                // ========== 17. 数据到达 Netty ==========
+                // byteBuf 现在包含 Redis 响应：:1\r\n
+
+            // ========== 18. 触发 ChannelPipeline ==========
+            pipeline.fireChannelRead(byteBuf)
+                |
+                // 从 Head 开始，依次调用 InboundHandler：
+
+                // ========== 19. ByteToMessageDecoder ==========
+                ByteToMessageDecoder.channelRead(ctx, msg)
+                    // 将字节追加到内部累积缓冲区
+                    cumulation = cumulator.cumulate(ctx, cumulation, msg);
+                    // 尝试解码
+                    callDecode(ctx, cumulation, out)
+                        // 调用子类的 decode 方法
+                        |
+                        // ========== 20. Redis 协议解码 ==========
+                        RedisDecoder.decode(ctx, byteBuf, out)
+                            // 解析 RESP 协议
+                            // 识别出这是整数回复（:1\r\n）
+                            // 创建 IntegerReducingOutput(1)
+                            // out.add(integerReply)
+
+                    // 解码出完整消息后，传播给下一个 Handler
+                    ctx.fireChannelRead(integerReply)
+                        |
+                        // ========== 21. Lettuce 的 CommandHandler ==========
+                        LettuceCommandHandler.channelRead(ctx, msg)
+                            // 根据命令 ID 找到对应的 Command 对象
+                            // 将响应设置到 Command 的 future
+                            Command.complete(reply)
+                                |
+                                // ========== 22. RedisFuture 完成 ==========
+                                RedisFuture.complete(result)
+                                    // 触发注册的回调
+                                    future.thenAccept(reply -> {
+                                        // 这是 Lettuce 注册的回调
+                                        // 将 Redis 响应转换为返回值
+                                    })
+                                        |
+                                        // ========== 23. Reactor Mono 信号 ==========
+                                        MonoCreate.complete(value)
+                                            // 触发 downstream.onNext(value)
+                                            // 触发 downstream.onComplete()
+
+                                            // ========== 24. 你的 .then() 链 ==========
+                                            // .then() 收到 onComplete 信号
+                                            // 订阅下一个 Mono
+                                            // 继续执行你的业务逻辑
